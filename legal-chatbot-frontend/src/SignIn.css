@@ -1,0 +1,116 @@
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family:sans-serif;
+}
+
+.sign-in-form {
+  background-color: white;
+  border-radius: 8px;
+  width: 32vw;
+  box-shadow: 2px 2px 8px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #2d3748;
+}
+
+p {
+  margin-bottom: 10px;
+  color: #4a5568;
+}
+
+.error-message {
+  color: red;
+  font-size: 0.875rem;
+  margin-bottom: 15px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  text-align: left;
+  width: 80%;
+}
+
+label {
+  font-size: 1rem;
+  color: #2d3748;
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+input {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  font-size: 1.2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background-color: transparent;
+  color: #2d3748;
+  padding-left: 12px;
+  width:95%;
+}
+
+.input-box input:focus {
+  outline: none;
+}
+
+.submit-button input {
+  width: 100%;
+  font-size: 1.4rem;
+  color: black;
+  background-color: #eee;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.submit-button:hover {
+  background-color: rgb(28, 28, 240,0.12);
+  color: rgb(28, 28, 240);
+}
+
+p a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+span a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sign-in-form {
+    padding: 20px;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  p {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .sign-in-form {
+    padding: 15px;
+    width: 90%;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+}
