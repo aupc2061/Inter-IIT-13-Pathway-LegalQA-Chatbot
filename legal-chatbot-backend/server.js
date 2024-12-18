@@ -69,7 +69,7 @@ console.log('WebSocket server listening on ws://localhost:5001');
 
 
 //mongo db connection
-mongoose.connect('mongodb+srv://himanshusinghal2003:32usfAJfjiWToy5r@legal.4rqce.mongodb.net/?retryWrites=true&w=majority&appName=legal', {
+mongoose.connect('insert mongo URL here', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
