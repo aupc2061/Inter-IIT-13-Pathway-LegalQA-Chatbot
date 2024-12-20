@@ -198,4 +198,12 @@ the outputs from previous tool calls and the query to generate
 the final answer that is to be shown to the user.
     - HIL: Humans can give feedback to rewrite or generate according to the retrieved docs. 
 
+## Team Members
+- [Himanshu Singhal](https://github.com/himanshu-skid19)  
+- [Rishita Agarwal](https://github.com/rishita3003)  
+- [Ayush Kumar](https://github.com/RedLuigi1)  
+- [Mahua Singh]()
+- [Anushka Gupta]()
+- [Ashutosh Bala]()
+- [Shayak Bhattacharya](https://github.com/aupc2061)
 
