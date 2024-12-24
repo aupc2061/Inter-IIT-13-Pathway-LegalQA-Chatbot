@@ -198,6 +198,111 @@ the outputs from previous tool calls and the query to generate
 the final answer that is to be shown to the user.
     - HIL: Humans can give feedback to rewrite or generate according to the retrieved docs. 
 
+## 6. Architecture
+├── Experiments and miscellaneous
+    ├── beam_retriever_train_and_exp.py
+    ├── lumber chunking.py
+    └── meta chunking.py
+├── HIL.py
+├── README.md
+├── Reports
+    ├── Pathway_MidEval_Report.pdf
+    └── endterm_report.pdf
+├── agents.py
+├── anthropic_functions.py
+├── beam_retriever.py
+├── beam_tool.py
+├── citations.py
+├── demo_videos
+    ├── demo.mp4
+    └── summary_video.mkv
+├── globals_.py
+├── imports.py
+├── joiner.py
+├── legal-chatbot-backend
+    ├── .gitignore
+    ├── cache1.txt
+    ├── models
+    │   ├── Chat.js
+    │   ├── Script_response.js
+    │   └── User.js
+    ├── package-lock.json
+    ├── package.json
+    ├── server.js
+    ├── test.txt
+    └── text_files
+    │   ├── generate.txt
+    │   ├── human_input_node.txt
+    │   ├── join.txt
+    │   ├── plan_and_schedule.txt
+    │   └── rewrite.txt
+├── legal-chatbot-frontend
+    ├── .gitignore
+    ├── README.md
+    ├── eslint.config.js
+    ├── index.html
+    ├── package-lock.json
+    ├── package.json
+    ├── public
+    │   ├── send_btn.svg
+    │   └── vite.svg
+    ├── src
+    │   ├── App.css
+    │   ├── App.jsx
+    │   ├── Home.css
+    │   ├── Home.jsx
+    │   ├── SignIn.css
+    │   ├── SignIn.jsx
+    │   ├── SignUp.css
+    │   ├── SignUp.jsx
+    │   ├── assets
+    │   │   └── react.svg
+    │   ├── files.jsx
+    │   ├── final_scripts
+    │   │   ├── .gitignore
+    │   │   ├── HIL.py
+    │   │   ├── agents.py
+    │   │   ├── anthropic_functions.py
+    │   │   ├── beam_retriever.py
+    │   │   ├── beam_tool.py
+    │   │   ├── citations.py
+    │   │   ├── get_all_files.py
+    │   │   ├── globals_.py
+    │   │   ├── imports.py
+    │   │   ├── joiner.py
+    │   │   ├── main.py
+    │   │   ├── output.txt
+    │   │   ├── output_parser.py
+    │   │   ├── pathway_server
+    │   │   │   ├── custom_parser.py
+    │   │   │   ├── run-server.py
+    │   │   │   ├── server.py
+    │   │   │   └── test_server.py
+    │   │   ├── planner.py
+    │   │   ├── prompts.py
+    │   │   ├── requirements.txt
+    │   │   ├── task_fetching_unit.py
+    │   │   ├── test.py
+    │   │   ├── tools.py
+    │   │   └── utils.py
+    │   ├── index.css
+    │   └── main.jsx
+    └── vite.config.js
+├── main.py
+├── output.txt
+├── output_parser.py
+├── pathway_server
+    ├── custom_parser.py
+    ├── run-server.py
+    ├── server.py
+    └── test_server.py
+├── planner.py
+├── prompts.py
+├── requirements.txt
+├── task_fetching_unit.py
+├── tools.py
+└── utils.py
+
 ## Team Members
 - [Himanshu Singhal](https://github.com/himanshu-skid19)  
 - [Rishita Agarwal](https://github.com/rishita3003)  
