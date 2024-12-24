@@ -199,6 +199,7 @@ the final answer that is to be shown to the user.
     - HIL: Humans can give feedback to rewrite or generate according to the retrieved docs. 
 
 ## 6. Architecture
+```
 ├── Experiments and miscellaneous
     ├── beam_retriever_train_and_exp.py
     ├── lumber chunking.py
@@ -302,6 +303,7 @@ the final answer that is to be shown to the user.
 ├── task_fetching_unit.py
 ├── tools.py
 └── utils.py
+```
 
 ## Team Members
 - [Himanshu Singhal](https://github.com/himanshu-skid19)  
