@@ -23,12 +23,10 @@ import pathway.xpacks.llm.parsers
 import pathway.xpacks.llm.splitters
 from pathway.stdlib.ml import index
 from pathway.stdlib.ml.index import KNNIndex
-from pathway.stdlib.indexing.data_index import _SCORE, DataIndex
+from pathway.stdlib.indexing.data_index import DataIndex
+from pathway.stdlib.indexing.colnames import _SCORE
 from pathway.stdlib.ml.classifiers import _knn_lsh
-from pathway.xpacks.llm.vector_store import _coerce_sync
-
-from pathway.xpacks.llm.vector_store import _unwrap_udf
-# from pathway.stdlib.utils import _coerce_sync, _unwrap_udf
+from pathway.xpacks.llm._utils import _coerce_sync, _unwrap_udf
 
 if TYPE_CHECKING:
     import langchain_core.documents
@@ -78,7 +76,7 @@ class VectorStoreServer:
         self.splitter = _unwrap_udf(
             splitter
             if splitter is not None
-            else pathway.xpacks.llm.splitters.null_splitter
+            else (lambda x: [(x, {})])
         )
         if isinstance(embedder, pw.UDF):
             self.embedder = embedder
@@ -200,7 +198,7 @@ class VectorStoreServer:
         def generic_transformer(x: str) -> list[tuple[str, dict]]:
             starting_node = node_transformer(x)
             final_node = run_transformations(starting_node, transformations)
-            return node_to_pathway(final_node)
+            return node_to_pathway(list(final_node))
 
         return VectorStoreServer(
             *docs,
@@ -275,14 +273,16 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
             pw.this.data
         )
 
-        chunked_docs += chunked_docs.select(text=pw.this.data["text"].as_str())
+        chunked_docs += chunked_docs.select(
+            text=pw.this.data["text"].as_str(),
+            embedding=self.embedder(pw.this.data["text"].as_str())
+        )
 
         knn_index = KNNIndex(
             chunked_docs.embedding,
             chunked_docs,
-            dimensions=self.embedding_dimension,
-            metadata_column=chunked_docs.data["metadata"],
-            embedder=self.embedder,
+            n_dimensions=self.embedding_dimension,
+            metadata=chunked_docs.data["metadata"],
         )
 
         parsed_docs += parsed_docs.select(

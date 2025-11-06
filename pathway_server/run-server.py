@@ -1,5 +1,12 @@
 
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file in project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
 TESSDATA_PREFIX = "usr/share/tesseract-ocr/5/tessdata" #Example: /usr/share/tesseract-ocr/4.00/tessdata
 os.environ["TESSDATA_PREFIX"] = TESSDATA_PREFIX 
 

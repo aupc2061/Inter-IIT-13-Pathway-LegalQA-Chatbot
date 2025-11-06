@@ -1,6 +1,10 @@
+import warnings
 import time
 from requests.exceptions import ConnectionError, ReadTimeout
 from llama_index.retrievers.pathway import PathwayRetriever
+
+# Suppress Pydantic warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 # Initialize retriever
 retriever = PathwayRetriever(host="127.0.0.1", port=8745, similarity_top_k=5)

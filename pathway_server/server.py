@@ -76,7 +76,7 @@ class VectorStoreServer:
         self.splitter = _unwrap_udf(
             splitter
             if splitter is not None
-            else pathway.xpacks.llm.splitters.null_splitter
+            else (lambda x: [(x, {})])
         )
         self.embedder = _unwrap_udf(embedder)
         if isinstance(embedder, pw.UDF):
@@ -195,7 +195,8 @@ class VectorStoreServer:
                 f"found {type(transformations[-1])}."
             )
 
-        embedder: BaseEmbedding = transformations.pop()
+        from typing import cast
+        embedder = cast(BaseEmbedding, transformations.pop())
 
         async def embedding_callable(x: str) -> list[float]:
             embedding = await embedder.aget_text_embedding(x)
@@ -204,7 +205,7 @@ class VectorStoreServer:
         def generic_transformer(x: str) -> list[tuple[str, dict]]:
             starting_node = node_transformer(x)
             final_node = run_transformations(starting_node, transformations)
-            return node_to_pathway(final_node)
+            return node_to_pathway(list(final_node))
 
         return VectorStoreServer(
             *docs,
@@ -405,18 +406,18 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
         def format_inputs(
             metadatas: list[pw.Json] | None, metadata_filter: str | None
         ) -> list[pw.Json]:
-            metadatas: list = metadatas if metadatas is not None else []  # type:ignore
-            assert metadatas is not None
+            metadata_list: list = metadatas if metadatas is not None else []  # type:ignore
+            assert metadata_list is not None
             if metadata_filter:
-                metadatas = [
+                metadata_list = [
                     m
-                    for m in metadatas
+                    for m in metadata_list
                     if jmespath.search(
                         metadata_filter, m.value, options=_knn_lsh._glob_options
                     )
                 ]
 
-            return metadatas
+            return metadata_list
 
         input_results = input_queries.join_left(all_metas, id=input_queries.id).select(
             all_metas.metadatas, input_queries.metadata_filter
