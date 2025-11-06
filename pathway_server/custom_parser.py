@@ -17,24 +17,24 @@ from functools import partial
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Literal
 
-from PIL import Image
-from pydantic import BaseModel
+# from PIL import Image
+# from pydantic import BaseModel
 
 import pathway as pw
-from pathway.internals import udfs
-from pathway.internals.config import _check_entitlements
-from pathway.optional_import import optional_imports
-from pathway.xpacks.llm import llms, prompts
-from pathway.xpacks.llm._parser_utils import (
-    img_to_b64,
-    maybe_downscale,
-    parse,
-    parse_image_details,
-)
-from pathway.xpacks.llm.constants import DEFAULT_VISION_MODEL
+# from pathway.internals import udfs
+# from pathway.internals.config import _check_entitlements
+# from pathway.optional_import import optional_imports
+# from pathway.xpacks.llm import llms, prompts
+# from pathway.xpacks.llm._parser_utils import (
+#     img_to_b64,
+#     maybe_downscale,
+#     parse,
+#     parse_image_details,
+# )
+# from pathway.xpacks.llm.constants import DEFAULT_VISION_MODEL
 
-if TYPE_CHECKING:
-    from openparse.processing import IngestionPipeline
+# if TYPE_CHECKING:
+#     from openparse.processing import IngestionPipeline
 
 class CustomParse(pw.UDF):
     
@@ -56,8 +56,13 @@ class CustomParse(pw.UDF):
         post_processors: list[Callable] | None = None,
         **unstructured_kwargs: Any,
     ):
-        with optional_imports("xpack-llm-docs"):
-            import unstructured.partition.auto
+        # lazy load to prevent unstructured from being a dependency on whole pathway
+        try:
+            import unstructured.partition.auto  # noqa
+        except ImportError:
+            raise ValueError(
+                "Please install unstructured with all documents support: `pip install unstructured[all-docs]`"
+            )
 
         super().__init__()
         _valid_modes = {"single", "elements", "paged"}

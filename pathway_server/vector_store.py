@@ -10,12 +10,10 @@ The client queries the server and returns matching documents.
 """
 
 import json
-import asyncio
-import numpy as np
 import logging
 import threading
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 import jmespath
 import requests
@@ -25,9 +23,12 @@ import pathway.xpacks.llm.parsers
 import pathway.xpacks.llm.splitters
 from pathway.stdlib.ml import index
 from pathway.stdlib.ml.index import KNNIndex
-# from pathway.stdlib.indexing.data_index import _SCORE, DataIndex
+from pathway.stdlib.indexing.data_index import _SCORE, DataIndex
 from pathway.stdlib.ml.classifiers import _knn_lsh
-from pathway.xpacks.llm._utils import _coerce_sync, _unwrap_udf
+from pathway.xpacks.llm.vector_store import _coerce_sync
+
+from pathway.xpacks.llm.vector_store import _unwrap_udf
+# from pathway.stdlib.utils import _coerce_sync, _unwrap_udf
 
 if TYPE_CHECKING:
     import langchain_core.documents
@@ -44,9 +45,9 @@ class VectorStoreServer:
         - embedder: callable that embeds a single document
         - parser: callable that parses file contents into a list of documents
         - splitter: callable that splits long documents
+        - doc_post_processors: optional list of callables that modify parsed files and metadata.
+            any callable takes two arguments (text: str, metadata: dict) and returns them as a tuple.
     """
-
-    embedder_config: dict[str, Any]
 
     def __init__(
         self,
@@ -59,6 +60,7 @@ class VectorStoreServer:
         ) = None,
         index_params: dict | None = None,
     ):
+        
         self.docs = docs
 
         self.parser: Callable[[bytes], list[tuple[str, dict]]] = _unwrap_udf(
@@ -78,21 +80,14 @@ class VectorStoreServer:
             if splitter is not None
             else pathway.xpacks.llm.splitters.null_splitter
         )
-        self.embedder = _unwrap_udf(embedder)
         if isinstance(embedder, pw.UDF):
-            self.embedder_config = embedder._get_config()
+            self.embedder = embedder
         else:
-            self.embedder_config = {}
+            self.embedder = pw.udf(embedder)
 
         # detect the dimensionality of the embeddings
-        self.embedding_dimension = len(_coerce_sync(self.embedder)("."))
+        self.embedding_dimension = len(_coerce_sync(self.embedder.__wrapped__)("."))
         logging.debug("Embedder has dimension %s", self.embedding_dimension)
-
-        DEFAULT_INDEX_PARAMS = dict(distance_type="cosine")
-        if index_params is not None:
-            DEFAULT_INDEX_PARAMS.update(index_params)
-
-        self.index_params = DEFAULT_INDEX_PARAMS
 
         self._graph = self._build_graph()
 
@@ -128,10 +123,11 @@ class VectorStoreServer:
                 for doc in splitter.transform_documents([Document(page_content=x)])
             ]
 
-        async def generic_embedded(x: str):
+        async def generic_embedded(x: str) -> list[float]:
             res = await embedder.aembed_documents([x])
             return res[0]
-
+        
+        
         return cls(
             *docs,
             embedder=generic_embedded,
@@ -195,7 +191,7 @@ class VectorStoreServer:
                 f"found {type(transformations[-1])}."
             )
 
-        embedder: BaseEmbedding = transformations.pop()
+        embedder = cast(BaseEmbedding, transformations.pop())
 
         async def embedding_callable(x: str) -> list[float]:
             embedding = await embedder.aget_text_embedding(x)
@@ -230,7 +226,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
             (docs,) = docs_s
         else:
             docs: pw.Table = docs_s[0].concat_reindex(*docs_s[1:])  # type: ignore
-
+        
         @pw.udf
         def parse_doc(data: bytes, metadata) -> list[pw.Json]:
             rets = self.parser(data)
@@ -270,38 +266,23 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
                 docs.append(dict(text=text,  metadata={**metadata, **ret[1]}))
             return docs
             # return [
-            #     dict(text=ret[0], metadata={**metadata, **ret[1]})  # type:ignore
+            #     dict(text= ret[0], metadata={**metadata, **ret[1]})  # type:ignore
             #     for ret in rets
             # ]
 
+        
         chunked_docs = parsed_docs.select(data=split_doc(pw.this.data)).flatten(
             pw.this.data
         )
 
-        if asyncio.iscoroutinefunction(self.embedder):
+        chunked_docs += chunked_docs.select(text=pw.this.data["text"].as_str())
 
-            @pw.udf(**self.embedder_config)
-            async def embedder(txt):
-                result = await self.embedder(txt)
-                return np.asarray(result)
-
-        else:
-
-            @pw.udf(**self.embedder_config)
-            def embedder(txt):
-                result = self.embedder(txt)
-                return np.asarray(result)
-
-        chunked_docs += chunked_docs.select(
-            embedding=embedder(pw.this.data["text"].as_str())
-        )
-
-        knn_index = index.KNNIndex(
+        knn_index = KNNIndex(
             chunked_docs.embedding,
             chunked_docs,
-            n_dimensions=self.embedding_dimension,
-            metadata=chunked_docs.data["metadata"],
-            **self.index_params,  # type:ignore
+            dimensions=self.embedding_dimension,
+            metadata_column=chunked_docs.data["metadata"],
+            embedder=self.embedder,
         )
 
         parsed_docs += parsed_docs.select(
@@ -373,9 +354,14 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
         ) -> str | None:
             ret_parts = []
             if metadata_filter:
+                metadata_filter = (
+                    metadata_filter.replace("'", r"\'")
+                    .replace("`", "'")
+                    .replace('"', "")
+                )
                 ret_parts.append(f"({metadata_filter})")
             if filepath_globpattern:
-                ret_parts.append(f'globmatch(`"{filepath_globpattern}"`, path)')
+                ret_parts.append(f"globmatch('{filepath_globpattern}', path)")
             if ret_parts:
                 return " && ".join(ret_parts)
             return None
@@ -405,7 +391,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
         def format_inputs(
             metadatas: list[pw.Json] | None, metadata_filter: str | None
         ) -> list[pw.Json]:
-            metadatas: list = metadatas if metadatas is not None else []  # type:ignore
+            metadatas = metadatas if metadatas is not None else []
             assert metadatas is not None
             if metadata_filter:
                 metadatas = [
@@ -441,66 +427,46 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
             default_value=None, description="An optional Glob pattern for the file path"
         )
 
+
     @pw.table_transformer
     def retrieve_query(
         self, retrieval_queries: pw.Table[RetrieveQuerySchema]
     ) -> pw.Table[QueryResultSchema]:
         embedder = self._graph["embedder"]
-        knn_index = self._graph["knn_index"]
+        knn_index: DataIndex = self._graph["knn_index"]
 
         # Relevant document search
         retrieval_queries = self.merge_filters(retrieval_queries)
-        retrieval_queries += retrieval_queries.select(
-            embedding=embedder(pw.this.query),
-        )
 
-        retrieval_results = retrieval_queries + knn_index.get_nearest_items(
-            retrieval_queries.embedding,
-            k=pw.this.k,
+        retrieval_results = retrieval_queries + knn_index.query_as_of_now(
+            retrieval_queries.query,
+            number_of_matches=retrieval_queries.k,
             collapse_rows=True,
             metadata_filter=retrieval_queries.metadata_filter,
-            with_distances=True,
         ).select(
-            result=pw.this.data,
-            dist=pw.this.dist,
+            result=pw.coalesce(pw.right.data, ()),  # replace None results with []
+            score=pw.coalesce(pw.right[_SCORE], ()),
         )
 
         retrieval_results = retrieval_results.select(
             result=pw.apply_with_type(
                 lambda x, y: pw.Json(
                     sorted(
-                        [{**res.value, "dist": dist} for res, dist in zip(x, y)],
+                        [{**res.value, "dist": -score} for res, score in zip(x, y)],
                         key=lambda x: x["dist"],  # type: ignore
                     )
                 ),
                 pw.Json,
                 pw.this.result,
-                pw.this.dist,
+                pw.this.score,
             )
         )
 
         return retrieval_results
 
-    @pw.table_transformer
-    def query(
-        self,
-        query_column: pw.ColumnReference,
-        number_of_matches: pw.ColumnExpression | int = 3,
-        collapse_rows: bool = True,
-        with_distances: bool = False,
-        metadata_filter: pw.ColumnExpression | None = None,
-    ):
-        embedder = self._graph["embedder"]
-        knn_index = self._graph["knn_index"]
-
-        query_embedding = query_column.table.select(embeddings=embedder(query_column))
-        return knn_index.get_nearest_items(
-            query_embedding.embeddings,
-            number_of_matches,
-            collapse_rows,
-            with_distances,
-            metadata_filter,
-        )
+    @property
+    def index(self) -> DataIndex:
+        return self._graph["knn_index"]
 
     def run_server(
         self,
@@ -511,6 +477,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
         cache_backend: (
             pw.persistence.Backend | None
         ) = pw.persistence.Backend.filesystem("./Cache"),
+        **kwargs,
     ):
         """
         Builds the document processing pipeline and runs it.
@@ -525,6 +492,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
               can use ``Backend`` class of the
               [`persistence API`](/developers/api-docs/persistence-api/#pathway.persistence.Backend)
               to override it.
+            - kwargs: optional parameters to be passed to :py:func:`~pathway.run`.
 
         Returns:
             If threaded, return the Thread object. Else, does not return.
@@ -540,7 +508,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
                 methods=("GET", "POST"),
                 schema=schema,
                 autocommit_duration_ms=50,
-                delete_completed_queries=True,
+                delete_completed_queries=False,
                 documentation=documentation,
             )
             writer(handler(queries))
@@ -586,7 +554,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
                     raise ValueError(
                         "Cache usage was requested but the backend is unspecified"
                     )
-                persistence_config = pw.persistence.Config.simple_config(
+                persistence_config = pw.persistence.Config(
                     cache_backend,
                     persistence_mode=pw.PersistenceMode.UDF_CACHING,
                 )
@@ -596,6 +564,7 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
             pw.run(
                 monitoring_level=pw.MonitoringLevel.NONE,
                 persistence_config=persistence_config,
+                **kwargs,
             )
 
         if threaded:
@@ -604,6 +573,65 @@ pw.io.fs.read('./sample_docs', format='binary', mode='static', with_metadata=Tru
             return t
         else:
             run()
+
+    def __repr__(self):
+        return f"VectorStoreServer({str(self._graph)})"
+
+
+class SlidesVectorStoreServer(VectorStoreServer):
+    """
+    Accompanying vector index server for the ``slide-search`` demo.
+    Builds a document indexing pipeline and starts an HTTP REST server.
+
+    Modifies the ``VectorStoreServer``'s ``pw_list_document`` endpoint to return set of
+    metadata after the parsing and document post processing stages.
+    """
+
+    excluded_response_metadata = ["b64_image"]
+
+    @pw.table_transformer
+    def inputs_query(
+        self,
+        input_queries: pw.Table[VectorStoreServer.InputsQuerySchema],  # type:ignore
+    ) -> pw.Table:
+        docs = self._graph["parsed_docs"]
+
+        all_metas = docs.reduce(metadatas=pw.reducers.tuple(pw.this.data["metadata"]))
+
+        input_queries = self.merge_filters(input_queries)
+
+        @pw.udf
+        def format_inputs(
+            metadatas: list[pw.Json] | None,
+            metadata_filter: str | None,
+        ) -> list[pw.Json]:
+            metadatas = metadatas if metadatas is not None else []
+            assert metadatas is not None
+            if metadata_filter:
+                metadatas = [
+                    m
+                    for m in metadatas
+                    if jmespath.search(
+                        metadata_filter, m.value, options=_knn_lsh._glob_options
+                    )
+                ]
+
+            metadata_list: list[dict] = [m.as_dict() for m in metadatas]
+
+            for metadata in metadata_list:
+                for metadata_key in self.excluded_response_metadata:
+                    metadata.pop(metadata_key, None)
+
+            return [pw.Json(m) for m in metadata_list]
+
+        input_results = input_queries.join_left(all_metas, id=input_queries.id).select(
+            all_metas.metadatas,
+            input_queries.metadata_filter,
+        )
+        input_results = input_results.select(
+            result=format_inputs(pw.this.metadatas, pw.this.metadata_filter)
+        )
+        return input_results
 
 
 class VectorStoreClient:
@@ -624,7 +652,7 @@ class VectorStoreClient:
         host: str | None = None,
         port: int | None = None,
         url: str | None = None,
-        timeout: int = 15,
+        timeout: int | None = 15,
         additional_headers: dict | None = None,
     ):
         err = "Either (`host` and `port`) or `url` must be provided, but not both."

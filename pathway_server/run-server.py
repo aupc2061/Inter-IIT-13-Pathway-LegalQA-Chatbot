@@ -1,9 +1,12 @@
 
 import os
-TESSDATA_PREFIX = "INSERT TESSDATA PREFIX HERE" #Example: /usr/share/tesseract-ocr/4.00/tessdata
+TESSDATA_PREFIX = "usr/share/tesseract-ocr/5/tessdata" #Example: /usr/share/tesseract-ocr/4.00/tessdata
 os.environ["TESSDATA_PREFIX"] = TESSDATA_PREFIX 
 
 import openai
+import atexit
+import signal
+import sys
 
 
 from pathway.xpacks.llm.vector_store import VectorStoreServer, VectorStoreClient
@@ -21,42 +24,70 @@ from pathway.udfs import DiskCache
 from llama_index.retrievers.pathway import PathwayRetriever
 
 from io import StringIO
-openai.api_key = "INSERT OPENAI_KEY HERE"
-os.environ['OPENAI_API_KEY'] = openai.api_key
+openai.api_key = os.environ.get('OPENAI_API_KEY')
 output_buffer = StringIO()
 
+def cleanup(server_thread):
+    """Cleanup function to handle graceful shutdown"""
+    if server_thread and server_thread.is_alive():
+        print("Shutting down server...")
+        sys.exit(0)
 
-data_sources = []
-data_sources.append(
-    pw.io.fs.read(
-        "INSERT PATH TO DATA DIRECTORY HERE",
-        format="binary",
-        mode="streaming",
-        with_metadata=True,
-    )  # This creates a `pathway` connector that tracks
-    # all the files in the ./data directory
-)
 
 from custom_parser import CustomParse
-parser = CustomParse()
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_voyageai import VoyageAIEmbeddings
+from pydantic import SecretStr
 
-embeddings = VoyageAIEmbeddings(
-    voyage_api_key="INSERT VOYAGEAI KEY HERE", model="voyage-3"
-)
 
-text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    chunk_size=512, chunk_overlap=50
-)
-embeddings_model = OpenAIEmbeddings(openai_api_key=os.environ["OPENAI_API_KEY"])
+def main():
+    data_sources = []
+    data_sources.append(
+        pw.io.fs.read(
+            "data",
+            format="binary",
+            mode="streaming",
+            with_metadata=True,
+        )  # This creates a `pathway` connector that tracks
+        # all the files in the ./data directory
+    )
+    
+    parser = CustomParse()
+    
+    # embeddings = VoyageAIEmbeddings(
+    #     voyage_api_key="INSERT VOYAGEAI KEY HERE", model="voyage-3"
+    # )
+    embeddings = OpenAIEmbeddings(api_key=SecretStr(os.environ["OPENAI_API_KEY"]))
 
-vector_server = VectorStoreServer.from_langchain_components(
-    *data_sources,
-    embedder=embeddings,
-    splitter=text_splitter,
-    parser = parser
-)
+    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=512, chunk_overlap=50
+    )
+    embeddings_model = OpenAIEmbeddings(api_key=SecretStr(os.environ["OPENAI_API_KEY"]))
 
-vector_server.run_server(host="127.0.0.1", port=8745, threaded=True, with_cache=True)
+    vector_server = VectorStoreServer.from_langchain_components(
+        *data_sources,
+        embedder=embeddings_model,
+        splitter=text_splitter,
+        parser = parser
+    )
+    
+    server_thread = vector_server.run_server(host="127.0.0.1", port=8745, threaded=True, with_cache=True)
+    
+    # Register cleanup handlers
+    atexit.register(cleanup, server_thread)
+    signal.signal(signal.SIGINT, lambda s, f: cleanup(server_thread))
+    signal.signal(signal.SIGTERM, lambda s, f: cleanup(server_thread))
+
+    try:
+        # Keep main thread alive
+        server_thread.join()
+    except KeyboardInterrupt:
+        cleanup(server_thread)
+        
+if __name__ == "__main__":
+    main()
+    
+    
+    
+    
